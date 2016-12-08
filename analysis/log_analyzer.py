@@ -9,7 +9,7 @@ import datetime
 from datetime import datetime
 
 tracker_regex = re.compile('.*op tracker -- seq: ([0-9]+), time: (\d\d\d\d-\d\d-\d\d \d\d:\d\d:\d\d\.\d\d\d\d\d\d), event: (.*), op: (.*)\((client\S* )')
-
+# 0, duration event,op
 all_stat={}
 
 def wrapgz(gfilename):
@@ -110,24 +110,26 @@ class Request:
         for (time, event, osd, op) in self.events:
             if(count==0):
                 last_time = time
-                count= count + 1
             duration = (time - last_time).total_seconds() * 1000000
-            outstr += "duration(%s)  %s (osd.%s): %s, %s\n"%(str(duration),str(time), str(osd), event, op)
+            outstr += "duration(%sus)\t%s\t(osd.%s):\t%s,\t%s\n"%(str(duration),str(time), str(osd), event, op)
             last_time = time
+            count= count + 1
         outstr += "=====================\n"
         return outstr
     def add_stat(self):
         count = 0
         for (time, event, osd, op) in self.events:
             if(count==0):
-               last_time = time
-               count= count + 1
+                last_time = time
             duration = (time - last_time).total_seconds() * 1000000
             #print event
-            if all_stat.has_key(event) == False :
-                all_stat[event] = 0
-            all_stat[event] += duration
+            if all_stat.has_key(count) == False :
+                all_stat[count] = [0,'event','op']
+            d = all_stat[count][0]
+            d += duration
+            all_stat[count] = [d,event,op]
             last_time = time
+            count=count + 1
 
     def primary(self):
         return self._primary
@@ -176,10 +178,12 @@ for i in requests.itervalues():
    i.add_stat()
    #print i.pretty_print()
 
+num = len(requests)
 
-num=len(all_stat)
-for event,duration in all_stat.items():
-    print "event:%s \t, duraion:%d" %(event, duration/num)
+length=len(all_stat)
+for i in range(0,length):
+    #print all_stat[i]
+    print "duraion:%d us \t event:%s\t op:%s\t " %(all_stat[i][0]/num, all_stat[i][1], all_stat[i][2])
 
 
 

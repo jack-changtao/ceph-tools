@@ -130,7 +130,8 @@ class Request:
             all_stat[count] = [d,event,op]
             last_time = time
             count=count + 1
-
+    def get_events_num(self):
+        return len(self.events)
     def primary(self):
         return self._primary
 
@@ -171,14 +172,27 @@ for _, i in all_requests:
 
 print osds
 
+
+for _, i in all_requests[:0:10]:
+    print i.pretty_print()
+
 for _, i in all_requests[:-10:-1]:
     print i.pretty_print()
 
+num_events=0
+skip=0;
 for i in requests.itervalues():
+   num = i.get_events_num()
+   if(num_events==0):
+      num_events=num
+   elif(num_events!=num):
+	skip+=1
+	continue
    i.add_stat()
    #print i.pretty_print()
 
 num = len(requests)
+num -= skip
 
 length=len(all_stat)
 for i in range(0,length):
@@ -186,6 +200,6 @@ for i in range(0,length):
     print "duraion:%d us \t event:%s\t op:%s\t " %(all_stat[i][0]/num, all_stat[i][1], all_stat[i][2])
 
 
-
+print "\nskip:%d\n" %(skip)
 
 

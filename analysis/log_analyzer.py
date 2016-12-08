@@ -8,7 +8,9 @@ import sys
 import datetime
 from datetime import datetime
 
-tracker_regex = re.compile('.*reqid: (.+), seq: ([0-9]+), time: (\d\d\d\d-\d\d-\d\d \d\d:\d\d:\d\d\.\d\d\d\d\d\d), event: (.*), request: (.*)')
+tracker_regex = re.compile('.*op tracker -- seq: ([0-9]+), time: (\d\d\d\d-\d\d-\d\d \d\d:\d\d:\d\d\.\d\d\d\d\d\d), event: (.*), op: (.*)\((client\S* )')
+
+all_stat={}
 
 def wrapgz(gfilename):
     def retval():
@@ -30,12 +32,12 @@ def get_logs(path):
     output['client'] = {}
     for path, dirs, files in os.walk(os.path.abspath(path)):
         for filename in files:
-            match = re.match('osd.([0-9]+).log.gz', filename)
+            match = re.match('ceph-osd.([0-9]+).log.gz', filename)
             if match:
                 fn = os.path.join(path, filename)
                 output['osd'][int(match.group(1))] = wrapgz(
                     os.path.join(path, filename))
-            match = re.match('osd.([0-9]+).log', filename)
+            match = re.match('ceph-osd.([0-9]+).log', filename)
             if match and not int(match.group(1)) in output['osd']:
                 fn = os.path.join(path, filename)
                 output['osd'][int(match.group(1))] = wrap(
@@ -56,13 +58,13 @@ def parse_tracker_line(line):
     retval = {}
     match = tracker_regex.match(line)
     if match:
-        retval['reqid'] = match.group(1)
-        retval['seq'] = int(match.group(2))
+        retval['seq'] = int(match.group(1))
         retval['time'] = datetime.strptime(
-            match.group(3), '%Y-%m-%d %H:%M:%S.%f'
+            match.group(2), '%Y-%m-%d %H:%M:%S.%f'
             )
-        retval['event'] = match.group(4)
-        retval['request'] = match.group(5)
+        retval['event'] = match.group(3)
+        retval['op'] = match.group(4)
+        retval['reqid'] = match.group(5)
         return retval
     return None
 
@@ -81,7 +83,7 @@ class Request:
             self.last_event = parsed['time']
             self.first_event = parsed['time']
         self.parsed.append(parsed)
-        self.events.append((parsed['time'], parsed['event'], parsed['osd']))
+        self.events.append((parsed['time'], parsed['event'], parsed['osd'], parsed['op']))
         self.events.sort()
         if self.last_event < parsed['time']:
             self.last_event = parsed['time']
@@ -104,10 +106,28 @@ class Request:
         outstr = "reqid: %s, duration: %s"%(
             self.parsed[0]['reqid'],str(self.duration()))
         outstr += "\n=====================\n"
-        for (time, event, osd) in self.events:
-            outstr += "%s (osd.%s): %s\n"%(str(time), str(osd), event)
+        count = 0
+        for (time, event, osd, op) in self.events:
+            if(count==0):
+                last_time = time
+                count= count + 1
+            duration = (time - last_time).total_seconds() * 1000000
+            outstr += "duration(%s)  %s (osd.%s): %s, %s\n"%(str(duration),str(time), str(osd), event, op)
+            last_time = time
         outstr += "=====================\n"
         return outstr
+    def add_stat(self):
+        count = 0
+        for (time, event, osd, op) in self.events:
+            if(count==0):
+               last_time = time
+               count= count + 1
+            duration = (time - last_time).total_seconds() * 1000000
+            #print event
+            if all_stat.has_key(event) == False :
+                all_stat[event] = 0
+            all_stat[event] += duration
+            last_time = time
 
     def primary(self):
         return self._primary
@@ -149,5 +169,19 @@ for _, i in all_requests:
 
 print osds
 
-for _, i in all_requests[:-100:-1]:
+for _, i in all_requests[:-10:-1]:
     print i.pretty_print()
+
+for i in requests.itervalues():
+   i.add_stat()
+   #print i.pretty_print()
+
+
+num=len(all_stat)
+for event,duration in all_stat.items():
+    print "event:%s \t, duraion:%d" %(event, duration/num)
+
+
+
+
+

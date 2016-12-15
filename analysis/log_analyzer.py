@@ -77,11 +77,19 @@ class Request:
         self._primary = -1
         self.osds = []
         
-
+    def is_skip_events(self, event):
+	#skip_events = set(['waiting for rw locks','send apply ack','op_applied','done'])
+        skip_events = set(['send apply ack','op_applied','done'])
+        if event in skip_events:
+	   return True
+        return False
     def add_event(self, parsed):
+	if self.is_skip_events(parsed['event']) == True:
+	   return 
         if self.parsed == []:
             self.last_event = parsed['time']
             self.first_event = parsed['time']
+         
         self.parsed.append(parsed)
         self.events.append((parsed['time'], parsed['event'], parsed['osd'], parsed['op']))
         self.events.sort()
@@ -96,22 +104,22 @@ class Request:
             self.osds.sort()
 
     def duration(self):
-        return (self.last_event - self.first_event).total_seconds()
+        return (self.last_event - self.first_event).total_seconds() * 1000
 
     def __repr__(self):
         return str(self.events) + " " + \
                str(self.duration()) + " " + self.parsed[0]['reqid']
 
     def pretty_print(self):
-        outstr = "reqid: %s, duration: %s"%(
-            self.parsed[0]['reqid'],str(self.duration()))
+        outstr = "reqid: %s, duration: %sms, events:%d "%(
+            self.parsed[0]['reqid'],str(self.duration() ),len(self.events))
         outstr += "\n=====================\n"
         count = 0
         for (time, event, osd, op) in self.events:
             if(count==0):
                 last_time = time
-            duration = (time - last_time).total_seconds() * 1000000
-            outstr += "duration(%sus)\t%s\t(osd.%s):\t%s,\t%s\n"%(str(duration),str(time), str(osd), event, op)
+            duration = (time - last_time).total_seconds() * 1000
+            outstr += "duration(%sms)\t%s\t(osd.%s):\t%s,\t%s\n"%(str(duration),str(time), str(osd), event, op)
             last_time = time
             count= count + 1
         outstr += "=====================\n"
@@ -121,7 +129,7 @@ class Request:
         for (time, event, osd, op) in self.events:
             if(count==0):
                 last_time = time
-            duration = (time - last_time).total_seconds() * 1000000
+            duration = (time - last_time).total_seconds() * 1000
             #print event
             if all_stat.has_key(count) == False :
                 all_stat[count] = [0,'event','op']
@@ -137,14 +145,12 @@ class Request:
 
     def replicas(self):
         return self.osds
-        
 
-requests = {}
 
-logs = get_logs(sys.argv[1])
-
-for i, (fn, func) in logs['osd'].iteritems():
-    with func() as f:
+def get_request(logs):
+    requests = {}
+    for i, (fn, func) in logs['osd'].iteritems():
+      with func() as f:
         for line in f.readlines():
             parsed = parse_tracker_line(line)
             if not parsed or parsed['reqid'] == 'unknown.0.0:0':
@@ -153,53 +159,60 @@ for i, (fn, func) in logs['osd'].iteritems():
             if parsed['reqid'] not in requests:
                 requests[parsed['reqid']] = Request()
             requests[parsed['reqid']].add_event(parsed)
+    return requests
 
-all_requests = [(i.duration(), i) for i in requests.itervalues()]
-all_requests.sort()
+def get_osds_info(requests):
+    all_requests = [(i.duration(), i) for i in requests.itervalues()]
+    all_requests.sort()
 
-pairs = {}
-for _, i in all_requests:
-    if tuple(i.replicas()) not in pairs:
-        pairs[tuple(i.replicas())] = 0
-    pairs[tuple(i.replicas())] += 1
-print pairs 
+    pairs = {}
+    for _, i in all_requests:
+       if tuple(i.replicas()) not in pairs:
+          pairs[tuple(i.replicas())] = 0
+       pairs[tuple(i.replicas())] += 1
+    print pairs
 
-osds = {}
-for _, i in all_requests:
-    if i.primary() not in osds:
-        osds[i.primary()] = 0
-    osds[i.primary()] += 1
+    osds = {}
+    for _, i in all_requests:
+       if i.primary() not in osds:
+          osds[i.primary()] = 0
+       osds[i.primary()] += 1
+    print osds
 
-print osds
+#fileter events num
+# if num_events ==0 , stat all events
+def get_stat(requests,num_events):
+    skip=0
+    for i in requests.itervalues():
+       num = i.get_events_num()
+       if( num_events!=0 and  num != num_events):
+          skip+=1
+          continue
+       i.add_stat()
+       d = i.duration()
+       if d >= 4 :  # print duration > 4 ms
+          print i.pretty_print()
+    return skip
+ 
+def dump_stat(requests,skip):
+    num = len(requests)
+    num -= skip
+
+    print "************ All stat info  count:%d  ************************" %(num)
+    length=len(all_stat)
+    for i in range(0,length):
+       #print all_stat[i]
+       print "avg duraion:%dms \t event:%s\t op:%s\t " %(all_stat[i][0]/num, all_stat[i][1], all_stat[i][2])
+
+    print "************ All stat info  end, skip:%d   ******************" %(skip)
 
 
-for _, i in all_requests[:0:10]:
-    print i.pretty_print()
+logs = get_logs(sys.argv[1])
+requests = get_request(logs)
 
-for _, i in all_requests[:-10:-1]:
-    print i.pretty_print()
+get_osds_info(requests)
 
-num_events=0
-skip=0;
-for i in requests.itervalues():
-   num = i.get_events_num()
-   if(num_events==0):
-      num_events=num
-   elif(num_events!=num):
-	skip+=1
-	continue
-   i.add_stat()
-   #print i.pretty_print()
+skip = get_stat(requests,12)
 
-num = len(requests)
-num -= skip
-
-length=len(all_stat)
-for i in range(0,length):
-    #print all_stat[i]
-    print "duraion:%d us \t event:%s\t op:%s\t " %(all_stat[i][0]/num, all_stat[i][1], all_stat[i][2])
-
-
-print "\nskip:%d\n" %(skip)
-
+dump_stat(requests,skip)
 

@@ -201,7 +201,7 @@ def dump_stat(requests,skip):
     print "************ All stat info  count:%d  ************************" %(num)
     length=len(all_stat)
     for i in range(0,length):
-       print "avg duraion:%s ms \t event:%s\t op:%s\t " %( str(all_stat[i][0] / num), all_stat[i][1], all_stat[i][2])
+       print "avg duraion:%.3f ms \t event:%s\t op:%s\t " %( all_stat[i][0] / num, all_stat[i][1], all_stat[i][2])
 
     print "************ All stat info  end, skip:%d   ******************" %(skip)
 

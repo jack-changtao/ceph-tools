@@ -137,7 +137,7 @@ class Request:
             d += duration
             all_stat[count] = [d,event,op]
             last_time = time
-            count=count + 1
+            count = count + 1
     def get_events_num(self):
         return len(self.events)
     def primary(self):
@@ -186,7 +186,7 @@ def get_stat(requests,num_events):
     for i in requests.itervalues():
        num = i.get_events_num()
        if( num_events!=0 and  num != num_events):
-          skip+=1
+          skip += 1
           continue
        i.add_stat()
        d = i.duration()
@@ -201,8 +201,7 @@ def dump_stat(requests,skip):
     print "************ All stat info  count:%d  ************************" %(num)
     length=len(all_stat)
     for i in range(0,length):
-       #print all_stat[i]
-       print "avg duraion:%dms \t event:%s\t op:%s\t " %(all_stat[i][0]/num, all_stat[i][1], all_stat[i][2])
+       print "avg duraion:%s ms \t event:%s\t op:%s\t " %( str(all_stat[i][0] / num), all_stat[i][1], all_stat[i][2])
 
     print "************ All stat info  end, skip:%d   ******************" %(skip)
 

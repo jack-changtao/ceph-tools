@@ -181,8 +181,9 @@ def get_osds_info(requests):
 
 #fileter events num
 # if num_events ==0 , stat all events
-def get_stat(requests,num_events):
+def get_stat(requests,num_events,lat_limit):
     skip=0
+    big_lat=0
     for i in requests.itervalues():
        num = i.get_events_num()
        if( num_events!=0 and  num != num_events):
@@ -190,14 +191,16 @@ def get_stat(requests,num_events):
           continue
        i.add_stat()
        d = i.duration()
-       if d >= 4 :  # print duration > 4 ms
+       if d >= lat_limit :  # print duration > 4 ms
+          big_lat += 1
           print i.pretty_print()
-    return skip
+    return [skip,big_lat]
  
-def dump_stat(requests,skip):
+def dump_stat(requests,skip,big_lat,lat_limit):
     num = len(requests)
     num -= skip
-
+    
+    print "There are %d ops latency > %d ms \n" %(big_lat, lat_limit)
     print "************ All stat info  count:%d  ************************" %(num)
     length=len(all_stat)
     for i in range(0,length):
@@ -211,7 +214,9 @@ requests = get_request(logs)
 
 get_osds_info(requests)
 
-skip = get_stat(requests,12)
+lat_limit = 4
+num_events =12
+skip,big_lat = get_stat(requests, num_events, lat_limit)
 
-dump_stat(requests,skip)
+dump_stat(requests,skip,big_lat,lat_limit)
 

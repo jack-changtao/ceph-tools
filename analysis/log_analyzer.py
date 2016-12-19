@@ -111,15 +111,15 @@ class Request:
                str(self.duration()) + " " + self.parsed[0]['reqid']
 
     def pretty_print(self):
-        outstr = "reqid: %s, duration: %sms, events:%d "%(
-            self.parsed[0]['reqid'],str(self.duration() ),len(self.events))
+        outstr = "reqid: %s, duration: %0.3fms, events:%d "%(
+            self.parsed[0]['reqid'], self.duration() ,len(self.events))
         outstr += "\n=====================\n"
         count = 0
         for (time, event, osd, op) in self.events:
             if(count==0):
                 last_time = time
             duration = (time - last_time).total_seconds() * 1000
-            outstr += "duration(%sms)\t%s\t(osd.%s):\t%s,\t%s\n"%(str(duration),str(time), str(osd), event, op)
+            outstr += "duration(%.3fms)\t%s\t(osd.%s):\t%s,\t%s\n"%(duration,str(time), str(osd), event, op)
             last_time = time
             count= count + 1
         outstr += "=====================\n"
@@ -183,7 +183,7 @@ def get_osds_info(requests):
 # if num_events ==0 , stat all events
 def get_stat(requests,num_events,lat_limit):
     skip=0
-    big_lat=0
+    long_lat_num=0
     for i in requests.itervalues():
        num = i.get_events_num()
        if( num_events!=0 and  num != num_events):
@@ -192,15 +192,15 @@ def get_stat(requests,num_events,lat_limit):
        i.add_stat()
        d = i.duration()
        if d >= lat_limit :  # print duration > 4 ms
-          big_lat += 1
+          long_lat_num += 1
           print i.pretty_print()
-    return [skip,big_lat]
+    return [skip,long_lat_num]
  
-def dump_stat(requests,skip,big_lat,lat_limit):
+def dump_stat(requests,skip,long_lat_num,lat_limit):
     num = len(requests)
     num -= skip
     
-    print "There are %d ops latency > %d ms \n" %(big_lat, lat_limit)
+    print "There are %d ops latency > %d ms \n" %(long_lat_num, lat_limit)
     print "************ All stat info  count:%d  ************************" %(num)
     length=len(all_stat)
     for i in range(0,length):
@@ -215,8 +215,8 @@ requests = get_request(logs)
 get_osds_info(requests)
 
 lat_limit = 4
-num_events =12
-skip,big_lat = get_stat(requests, num_events, lat_limit)
+num_events = 0
+skip,long_lat_num = get_stat(requests, num_events, lat_limit)
 
-dump_stat(requests,skip,big_lat,lat_limit)
+dump_stat(requests,skip,long_lat_num,lat_limit)
 

@@ -79,7 +79,7 @@ class Request:
         
     def is_skip_events(self, event):
 	#skip_events = set(['waiting for rw locks','send apply ack','op_applied','done'])
-        skip_events = set(['send apply ack','op_applied','done'])
+        skip_events = set(['send apply ack','op_applied','done','sub_op_applied'])
         if event in skip_events:
 	   return True
         return False
@@ -215,6 +215,10 @@ requests = get_request(logs)
 get_osds_info(requests)
 
 lat_limit = 4
+
+#1 replication 21 events 
+#2 replication 
+#3 replication 51 events
 num_events = 0
 skip,long_lat_num = get_stat(requests, num_events, lat_limit)
 

@@ -10,7 +10,7 @@ from datetime import datetime
 
 tracker_regex = re.compile('.*op tracker -- seq: ([0-9]+), time: (\d\d\d\d-\d\d-\d\d \d\d:\d\d:\d\d\.\d\d\d\d\d\d), event: (.*), op: (.*)\((client\S* )')
 # 0, duration event,op
-all_stat={}
+all_avg_stat={}
 
 def wrapgz(gfilename):
     def retval():
@@ -129,34 +129,45 @@ class Request:
                slave1 = match.group(1)
                slave2 = match.group(2)
             if str(osd) == slave1:
-               outstr += "duration(%.3fms)\t%s\t\t(osd.%s):\t%s,\t%s\n"%(duration,str(time), str(osd), event, op)
+               outstr += "duration(%.3fms)\t%s\t\t(osd.%s)\t%s\t%s\n"%(duration,str(time), str(osd), event, op)
             elif str(osd) == slave2:
-               outstr += "duration(%.3fms)\t%s\t\t\t(osd.%s):\t%s,\t%s\n"%(duration,str(time), str(osd), event, op)
+               outstr += "duration(%.3fms)\t%s\t\t\t(osd.%s)\t%s\t%s\n"%(duration,str(time), str(osd), event, op)
             else:
-               outstr += "duration(%.3fms)\t%s\t(osd.%s):\t%s,\t%s\n"%(duration,str(time), str(osd), event, op)
+               outstr += "duration(%.3fms)\t%s\t(osd.%s)\t%s\t%s\n"%(duration,str(time), str(osd), event, op)
             last_time = time
             count= count + 1
         outstr += "=====================\n"
         return outstr
-    def add_stat(self):
+    def add_avg_stat(self):
         count = 0
         for (time, event, osd, op) in self.events:
             if(count==0):
                 last_time = time
             duration = (time - last_time).total_seconds() * 1000
             #print event
-            if all_stat.has_key(count) == False :
-                all_stat[count] = [0,'event','op']
-            d = all_stat[count][0]
+            if all_avg_stat.has_key(count) == False :
+                all_avg_stat[count] = [0,'event','op']
+            d = all_avg_stat[count][0]
             d += duration
-            all_stat[count] = [d,event,op]
+            all_avg_stat[count] = [d,event,op]
             last_time = time
             count = count + 1
+    def get_long_events(self, lat):
+        import pdb
+        #pdb.set_trace()
+        count = 0
+	for (time, event, osd, op) in self.events:
+           if(count==0):
+                last_time = time
+           duration = (time - last_time).total_seconds() * 1000
+           if duration > lat:
+              print "long event: reqid:%s, duration:%.3f, event:%s, osd.%d, %s" %(self.parsed[0]['reqid'], duration, event, osd, op)
+           last_time = time
+           count = count + 1
     def get_events_num(self):
         return len(self.events)
     def primary(self):
         return self._primary
-
     def replicas(self):
         return self.osds
 
@@ -193,34 +204,61 @@ def get_osds_info(requests):
        osds[i.primary()] += 1
     print osds
 
+
+
+
+lat_time = [2,5, 10, 20, 50, 100,500,1000]
+long_lat = 100
+lat_stat = {}   
+
+def dump_lat_stat(num):
+    for time in lat_time:
+       if lat_stat.get(time,0)==0: 
+          lat_stat[time] = 0
+       print "[<%d ms] count:%d ratio:%.2f" % (time, lat_stat[time], (lat_stat[time]*1.00*100)/num) 
+    if lat_stat.get('other',0) == 0:
+       lat_stat['other']=0
+    print "[>%d ms] count:%d ratio:%.2f" % (time, lat_stat['other'], (lat_stat['other']*1.00*100)/num)
+def get_lat_stat(request):
+    d = request.duration()
+    length = len(lat_time)
+    for i in range(0, length):
+       if d < lat_time[i]:
+          key = lat_time[i]
+          if lat_stat.get(key,0) == 0:
+             lat_stat[key] = 1
+          else:
+             lat_stat[key] += 1
+          break
+    if d > lat_time[length-1]:
+       if lat_stat.get('other',0) == 0:
+          lat_stat['other'] =1
+       else:
+          lat_stat['other'] += 1
+    if d > long_lat:
+       request.get_long_events(long_lat)  
 #fileter events num
 # if num_events ==0 , stat all events
-def get_stat(requests,num_events,lat_limit):
+def get_stat(requests,num_events):
     skip=0
-    long_lat_num=0
     for i in requests.itervalues():
        num = i.get_events_num()
-       if( num_events!=0 and  num != num_events):
+       if( num_events != 0 and  num != num_events):
           skip += 1
           continue
-       i.add_stat()
-       d = i.duration()
-       if d >= lat_limit :  # print duration > 4 ms
-          long_lat_num += 1
-          print i.pretty_print()
-    return [skip,long_lat_num]
+       get_lat_stat(i)
+       i.add_avg_stat()
+    return skip
  
-def dump_stat(requests,skip,long_lat_num,lat_limit):
-    num = len(requests)
+def dump_avg_stat(num,skip):
     num -= skip
     
-    print "There are %d ops latency > %d ms ratio:%.2f \n" %(long_lat_num, lat_limit,(long_lat_num * 1.000/ num))
-    print "************ All stat info  count:%d  ************************" %(num)
-    length=len(all_stat)
+    print "************ All avg stat info  count:%d  ************************" %(num)
+    length=len(all_avg_stat)
     for i in range(0,length):
-       print "avg duraion:%.3f ms \t event:%s\t op:%s\t " %( all_stat[i][0] / num, all_stat[i][1], all_stat[i][2])
+       print "avg duraion:%.3f ms \t event:%s\t op:%s\t " %( all_avg_stat[i][0] / num, all_avg_stat[i][1], all_avg_stat[i][2])
 
-    print "************ All stat info  end, skip:%d   ******************" %(skip)
+    print "************ All avg stat info  end, skip:%d   ******************" %(skip)
 
 
 logs = get_logs(sys.argv[1])
@@ -230,11 +268,18 @@ requests = get_request(logs)
 
 lat_limit = 100
 
+num = len(requests)
 #1 replication 12 events 
 #2 replication 
 #3 replication 51 events
-num_events = 0
-skip,long_lat_num = get_stat(requests, num_events, lat_limit)
 
-dump_stat(requests,skip,long_lat_num,lat_limit)
+num_events = 0
+
+skip = get_stat(requests, num_events)
+
+dump_lat_stat(num-skip)
+
+dump_avg_stat(num,skip)
+
+
 

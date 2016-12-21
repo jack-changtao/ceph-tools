@@ -104,6 +104,8 @@ class Request:
             self.osds.sort()
 
     def duration(self):
+        if (self.last_event == None  or self.first_event == None):
+	  return 0.0
         return (self.last_event - self.first_event).total_seconds() * 1000
 
     def __repr__(self):
@@ -115,11 +117,23 @@ class Request:
             self.parsed[0]['reqid'], self.duration() ,len(self.events))
         outstr += "\n=====================\n"
         count = 0
+        event_regex = re.compile('waiting for subops from (\d),(\d)')
+        slave1 = ""
+        slave2 = "" 
         for (time, event, osd, op) in self.events:
             if(count==0):
                 last_time = time
             duration = (time - last_time).total_seconds() * 1000
-            outstr += "duration(%.3fms)\t%s\t(osd.%s):\t%s,\t%s\n"%(duration,str(time), str(osd), event, op)
+            match = event_regex.match(event)
+            if match:
+               slave1 = match.group(1)
+               slave2 = match.group(2)
+            if str(osd) == slave1:
+               outstr += "duration(%.3fms)\t%s\t\t(osd.%s):\t%s,\t%s\n"%(duration,str(time), str(osd), event, op)
+            elif str(osd) == slave2:
+               outstr += "duration(%.3fms)\t%s\t\t\t(osd.%s):\t%s,\t%s\n"%(duration,str(time), str(osd), event, op)
+            else:
+               outstr += "duration(%.3fms)\t%s\t(osd.%s):\t%s,\t%s\n"%(duration,str(time), str(osd), event, op)
             last_time = time
             count= count + 1
         outstr += "=====================\n"
@@ -200,7 +214,7 @@ def dump_stat(requests,skip,long_lat_num,lat_limit):
     num = len(requests)
     num -= skip
     
-    print "There are %d ops latency > %d ms \n" %(long_lat_num, lat_limit)
+    print "There are %d ops latency > %d ms ratio:%.2f \n" %(long_lat_num, lat_limit,(long_lat_num * 1.000/ num))
     print "************ All stat info  count:%d  ************************" %(num)
     length=len(all_stat)
     for i in range(0,length):
@@ -212,11 +226,11 @@ def dump_stat(requests,skip,long_lat_num,lat_limit):
 logs = get_logs(sys.argv[1])
 requests = get_request(logs)
 
-get_osds_info(requests)
+#get_osds_info(requests)
 
-lat_limit = 4
+lat_limit = 100
 
-#1 replication 21 events 
+#1 replication 12 events 
 #2 replication 
 #3 replication 51 events
 num_events = 0

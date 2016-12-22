@@ -12,6 +12,8 @@ tracker_regex = re.compile('.*op tracker -- seq: ([0-9]+), time: (\d\d\d\d-\d\d-
 # 0, duration event,op
 all_avg_stat={}
 
+long_event_stat = {}
+
 def wrapgz(gfilename):
     def retval():
         gfile = gzip.open(gfilename, 'rb')
@@ -162,6 +164,10 @@ class Request:
            duration = (time - last_time).total_seconds() * 1000
            if duration > lat:
               print "long event: reqid:%s, duration:%.3f, event:%s, osd.%d, %s" %(self.parsed[0]['reqid'], duration, event, osd, op)
+	      if long_event_stat.get(event,0) == 0:
+                 long_event_stat[event] = 1
+              else:
+                 long_event_stat[event] += 1
            last_time = time
            count = count + 1
     def get_events_num(self):
@@ -205,9 +211,7 @@ def get_osds_info(requests):
     print osds
 
 
-
-
-lat_time = [2,5, 10, 20, 50, 100,500,1000]
+lat_time = [1,2,5,10,20,40,50,80,100,200,400,500,1000]
 long_lat = 100
 lat_stat = {}   
 
@@ -219,6 +223,7 @@ def dump_lat_stat(num):
     if lat_stat.get('other',0) == 0:
        lat_stat['other']=0
     print "[>%d ms] count:%d ratio:%.2f" % (time, lat_stat['other'], (lat_stat['other']*1.00*100)/num)
+
 def get_lat_stat(request):
     d = request.duration()
     length = len(lat_time)
@@ -237,6 +242,7 @@ def get_lat_stat(request):
           lat_stat['other'] += 1
     if d > long_lat:
        request.get_long_events(long_lat)  
+       print request.pretty_print()
 #fileter events num
 # if num_events ==0 , stat all events
 def get_stat(requests,num_events):
@@ -252,9 +258,8 @@ def get_stat(requests,num_events):
  
 def dump_avg_stat(num,skip):
     num -= skip
-    
-    print "************ All avg stat info  count:%d  ************************" %(num)
     length=len(all_avg_stat)
+    print "************ All avg stat info  count:%d, stat events:%d  ************************" %(num,length)
     for i in range(0,length):
        print "avg duraion:%.3f ms \t event:%s\t op:%s\t " %( all_avg_stat[i][0] / num, all_avg_stat[i][1], all_avg_stat[i][2])
 
@@ -278,6 +283,11 @@ num_events = 0
 skip = get_stat(requests, num_events)
 
 dump_lat_stat(num-skip)
+
+print "long event stat:"
+print long_event_stat
+
+
 
 dump_avg_stat(num,skip)
 

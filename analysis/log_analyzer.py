@@ -12,7 +12,13 @@ tracker_regex = re.compile('.*op tracker -- seq: ([0-9]+), time: (\d\d\d\d-\d\d-
 # 0, duration event,op
 all_avg_stat={}
 
-long_event_stat = {}
+long_event_stat = {} #long event stat
+lat_time = [1,2,5,10,20,40,50,80,100,200,400,500,1000]
+long_lat = 20 #long event latency ms
+lat_stat = {}   
+
+skip_events = set(['send apply ack','op_applied','done','sub_op_applied'])
+#skip_events = set([])
 
 def wrapgz(gfilename):
     def retval():
@@ -81,7 +87,6 @@ class Request:
         
     def is_skip_events(self, event):
 	#skip_events = set(['waiting for rw locks','send apply ack','op_applied','done'])
-        skip_events = set(['send apply ack','op_applied','done','sub_op_applied'])
         if event in skip_events:
 	   return True
         return False
@@ -154,22 +159,29 @@ class Request:
             all_avg_stat[count] = [d,event,op]
             last_time = time
             count = count + 1
-    def get_long_events(self, lat):
+    def get_long_events(self):
         import pdb
         #pdb.set_trace()
         count = 0
+        max_duration = 0
+        item=()
 	for (time, event, osd, op) in self.events:
            if(count==0):
                 last_time = time
            duration = (time - last_time).total_seconds() * 1000
-           if duration > lat:
-              print "long event: reqid:%s, duration:%.3f, event:%s, osd.%d, %s" %(self.parsed[0]['reqid'], duration, event, osd, op)
-	      if long_event_stat.get(event,0) == 0:
-                 long_event_stat[event] = 1
-              else:
-                 long_event_stat[event] += 1
+           if duration > max_duration:
+              max_duration = duration
+              item=(max_duration,event,osd,op)
            last_time = time
            count = count + 1
+        print "long event: reqid:%s, duration:%.3f, event:%s, osd.%d, %s" %(self.parsed[0]['reqid'], item[0], item[1], item[2], item[3])
+   
+        long_event=item[1]
+        if long_event_stat.get(long_event,0) == 0:
+           long_event_stat[long_event] = 1
+        else:
+           long_event_stat[long_event] += 1
+
     def get_events_num(self):
         return len(self.events)
     def primary(self):
@@ -211,9 +223,6 @@ def get_osds_info(requests):
     print osds
 
 
-lat_time = [1,2,5,10,20,40,50,80,100,200,400,500,1000]
-long_lat = 100
-lat_stat = {}   
 
 def dump_lat_stat(num):
     for time in lat_time:
@@ -241,7 +250,7 @@ def get_lat_stat(request):
        else:
           lat_stat['other'] += 1
     if d > long_lat:
-       request.get_long_events(long_lat)  
+       request.get_long_events()  
        print request.pretty_print()
 #fileter events num
 # if num_events ==0 , stat all events
@@ -270,8 +279,6 @@ logs = get_logs(sys.argv[1])
 requests = get_request(logs)
 
 #get_osds_info(requests)
-
-lat_limit = 100
 
 num = len(requests)
 #1 replication 12 events 
